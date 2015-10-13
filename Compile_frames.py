@@ -42,12 +42,13 @@ def getFrameNumbers(frameLogs, words_Sounds, cwd):
         checkSet = set()    #sounds to be checked
         new_Words_Sounds = set()
         for word_sound in words_Sounds:     #this and below is to make sure reviewers didn't mislabel or forget to label a segement
-            for entry in all_Logs[log]: 
+            for entry in all_Logs[log]:
                 if (word_sound[0] in entry and word_sound[1] in entry) or (word_sound[0] in entry and 'X'+word_sound[1][-1] in entry):
                     checkSet.add(word_sound)#compile set of sounds that have been grabbed
 
         for word_sound in words_Sounds:
             if word_sound not in checkSet:
+                print word_sound
                 noMatches.add((log, word_sound))    #incase a sound is in a study, and the reviewer misspells it to the point it
     if len(noMatches) == len(words_Sounds):              #cant be matched (if not matched) add it (later) to the Ierrors Set to be fixed
         print '!!ERROR!! NO MATCHES WERE FOUND - ENSURE THAT BOTH TEXTGRIDS ARE !UTF-8! ENCODING'
@@ -69,14 +70,21 @@ def find_Sounds(line, all_Logs,words_Sounds, log,i):
     
     #just for neutral frames##
     if 'neutral' in line:
+
+        #hack so only one person has to ID neutral frames
+        # if 'sj' in log:
+        if 'mak' in log:
+            return all_Logs, i+1
+        ##########################################
+        
         study = '14'    #I've arbitrarily decided that neutral tongue images will be "study 14" for coding purposes - to keep all 'study' variables as adjacent integers
         soundInfo = (data[2],data[4],data[5])
-        # print soundInfo, data[9]
+
         if data[9] != data[10] or data[9] != data[8]:         #neutral frames need to only have one frame, if the start doesn't equal the end, crash and report location of error
-            print "ERROR!! NEUTRAL BOUNDARIES AT {0} FOR ID'ER {1} CONTAINS MORE THAN ONE FRAME - FIX PLEASE :)".format(data[9],log)
+            print "ERROR!! NEUTRAL BOUNDARIES NEAR FRAME {0} FOR ID'ER {1} CONTAINS MORE THAN ONE FRAME - FIX PLEASE :)".format(data[9],log)
             crash  #crashes program so user can fix boundaries
         all_Logs[log][soundInfo][study] = (data[8], data[9], data[10])
-        
+
         i+=1
         return all_Logs, i
     ##########################
@@ -331,7 +339,7 @@ def rewriteTextgrids(oldTG, TG, subject, IDer, cwd):    #rewrite the textgrids t
 #**********************************************************************************************************
 
 ###########################################################################################################
-### IDENTIFYING ERRORS BETWEEN ORTHOGRAPHIC LABELING (IERRORS) AND FRAME IDENTIFICATION (MERRORS)
+### IDENTIFYING ERRORS BETWEEN ORTHOGRAPHIC LABELING INPUT (IERRORS) AND FRAME IDENTIFICATION MATCHING (MERRORS)
 ###########################################################################################################
          
 def findSameIteration(all_Logs, IerrorReport, MerrorReport, cwd, noMatches):    #currently only set up to handle comparing two reviewers at once
@@ -357,11 +365,12 @@ def findSameIteration(all_Logs, IerrorReport, MerrorReport, cwd, noMatches):    
             subject2 = log2[:underscore] #compare 
             if subject == subject2: #but make sure subj's DO match
                 Merror, Ierror, Merrors, Ierrors = compareNumbers(all_Logs,log,log2,Merrors,Ierrors,subject) #comparing the frame numbers
+                
                 if len(noMatches)>0:    #this is here incase no discrepencies were found b/w reviewers, but there are missing sounds
                     Ierror = True
 
                 if Ierror == True:  #if there are orthographic discrepencies
-                    print Ierrors#, noMatches
+                    print "ERROR LIST:", Ierrors, noMatches
                     Ierror_tmp = set()
                     for noMatch in noMatches:
                         match = False
@@ -381,14 +390,26 @@ def findSameIteration(all_Logs, IerrorReport, MerrorReport, cwd, noMatches):    
                         print 'Alternatively, make sure all words are present in each textgrid - if a word is missing in the first tier, this error is risen'
                         break
                     IerrorReport[subject] = (log, log2) #put entry in IerrorReport - to be printed once script is finished
-                    
+                  
                 if Merror == True:  #if there are frame mismatch errors b/w reviewers
                     MerrorReport[subject] = MerrorReport[subject]|(Merrors)  #put entry in MerrorReport - to be printed once script is finished
 
             if len(Ierrors) == 0:   #only if there are no labeling errors, fill out the excel.  If there are, rerun Dan's praat script, and rerun this script
                 fillOutExcel(Merrors, all_Logs)     #in order to make sure all sounds match, and all frame numbers are placed in the excel
+        
     if subject not in IerrorReport and subject not in MerrorReport:      #if there are no discrepancies whatsoever b/w reviewers, copy, move, and rename the frame files
-        move_RenameFrames(all_Logs, log, subject,cwd)
+        #hack to avoid me having to label neutral tongue images.
+        # this prevents the same person from holding both "log" variables; probably only will work with 2 comparers
+        if log == log2:
+            for log_ in all_Logs:
+                if log != log_:
+                    log2 = log_
+        # change depending on who identifies the NTCs
+        # if "sj" in log2:
+        if "mak" in log2:
+            move_RenameFrames(all_Logs, log, subject, cwd)
+        else:
+            move_RenameFrames(all_Logs, log2, subject,cwd)
 
     if hit == False:
         print 'ERROR: no logs in all_Logs. Make sure there is a .framelog file in the appropriate directory.'
@@ -400,6 +421,7 @@ def compareNumbers(all_Logs,log,log2, Merrors,Ierrors,subject):
     Ierror = False  #Intput error (wrong spelling)
     for word_sound in all_Logs[log]:
         for study in all_Logs[log][word_sound]:
+
             #needs try to avoid Keyerror (if letters for sound not the set
             #between reviewrs)                                                      
             try:    #this will succeed only if there are no labeling errors
@@ -423,6 +445,7 @@ def compareNumbers(all_Logs,log,log2, Merrors,Ierrors,subject):
                             pass
                 Ierror = True #if errors are found, the following code will find the textgrid, and take the user through a process to fix the errors
                 Ierrors.add((log,word_sound,log2))
+
     return Merror, Ierror, Merrors, Ierrors
 
 
@@ -565,7 +588,7 @@ def fillOutExcel(Merrors, all_Logs):    #entering the new data into the master e
                         break
 
     shutil.move(os.path.join(cwd,oldVersion),oldXls)    #move the old excel file to the "oldXls"folder
-    write_Sheet.save(os.path.join(cwd, 'Identification_log_{0}.xls'.format(newVersionNum)))  # write the new sheet with the new version number in name
+    write_Sheet.save(os.path.join(cwd, 'Identification_log_0{0}.xls'.format(newVersionNum)))  # write the new sheet with the new version number in name
 
 #************************************************************************************************
 
@@ -575,16 +598,16 @@ def fillOutExcel(Merrors, all_Logs):    #entering the new data into the master e
              
 def move_RenameFrames(all_Logs, log, subject,cwd):  #this only occurs when no Input or frame Mismatch errors were present
     ##########uncomment below, comment out while loop, to hard-set an answer
-    # move = 'a'
+    move = 't'
     ###################################### Don't delete below
-    while True:
-        move = raw_input('\nAll comparisons yielded total and utter agreement.  Would you like to move all identified frames, [T]arget frames, or none?\n[a/t/n]: ')
-        if move == 'n':
-            return
-        elif move == 'a' or move == 't':
-            break
-        else:
-            print 'You must enter a valid input: a/t/n'
+    # while True:
+    #     move = raw_input('\nAll comparisons yielded total and utter agreement.  Would you like to move all identified frames, [T]arget frames, or none?\n[a/t/n]: ')
+    #     if move == 'n':
+    #         return
+    #     elif move == 'a' or move == 't':
+    #         break
+    #     else:
+    #         print 'You must enter a valid input: a/t/n'
     #######################################
 
     print 'MOVING FRAMES...\n'
@@ -608,16 +631,15 @@ def move_RenameFrames(all_Logs, log, subject,cwd):  #this only occurs when no In
 
     for fl in Completed_traces:
 
-        try:
-            flEnd = fl[fl.rfind('_')-5:fl.rfind('_')-2]+fl[fl.rfind('_'):fl.find('.')]  #set of sounds+frame numbers of the trace files
-            Completed_traceSet.add(flEnd)
+        # try:
+        flEnd = fl[fl.rfind('_')-5:fl.rfind('_')-2]+fl[fl.rfind('_'):fl.find('.')]  #set of sounds+frame numbers of the trace files
+        Completed_traceSet.add(flEnd)
         
-        except IndexError:
-            if 'CX' in fl:      #hack
-                continue
+        # except IndexError:
+        #     if 'CX' in fl:      #hack
+        #         continue
 
     for word_Sound in all_Logs[log]:
-
         if 'X' in word_Sound[2]:        #If the sound is labeled as non-existent, then don't move the frames associated with the label
             continue
         for study in all_Logs[log][word_Sound]:
@@ -989,15 +1011,15 @@ def get_Studs():    #user interface to identify studies in question
     #Called by main()
     #Very similar to above get_Subjs().  Works in the same way - for a little more detail, see above function.
     ###############################
-    # studies = set(['11', '1', '2'])   #use above ### if you need/want to preset a given stud(s) several times in a row, without having to reenter info
+    # studies = set(['11'])   #use above ### if you need/want to preset a given stud(s) several times in a row, without having to reenter info
     # return studies
     ###############################
     studies = set()
     print "Identify target study, one at a time [1-14], or enter 'all' for all studies. When done, type 'done'. "
     while True:
-        # study = raw_input("Enter study number(s): ")
+        study = raw_input("Enter study number(s): ")
         ################# comment above and use below to preset to all
-        study = 'all'
+        # study = 'all'
         #################
         if study == 'done': #same as above
             break

@@ -1,5 +1,9 @@
 from __future__ import division
-import os, shutil, xlrd
+import os
+import shutil
+import xlrd
+import json
+import re
 from collections import defaultdict
 from os.path import join
 
@@ -19,13 +23,33 @@ def moveNormal(subjsreps):
 
 	subjs = []
 	reps = set()
+	excel = xlrd.open_workbook(join(path, "Inadequate_neutrals.xls"))		#check the excel folder where 'bad' neutral images are identified
 	for subjrep in subjsreps:		#find the subject/repetition and place in separate structures
 		subjs.append(subjrep[:2])
 		reps.add(subjrep[-1])
 
-	neutral_trace_paths = defaultdict(lambda: defaultdict(dict))		#holds the file names of the neutral traces - to be moved in 'moveNeutrals'
-	bad_neutrals = defaultdict(set)									#holds the pre-identified 'bad' neutral images - so they are not used.
-	word_lists = {}										#holds an ordered word list for each subj/rep pair
+		try:
+			sheet = excel.sheet_by_name((subjrep))		#obtain the sheet object from the excel workbook object
+		except:
+			sheet = excel.sheet_by_name((subjrep[1:]))  #if the sheet name is a single digit, and a '0' is not inserted before the single number
+
+		neutral_trace_paths = defaultdict(lambda: defaultdict(dict))		#holds the file names of the neutral traces - to be moved in 'moveNeutrals'
+		bad_neutrals = defaultdict(set)									#holds the pre-identified 'bad' neutral images - so they are not used.
+		word_lists = {}	#holds an ordered word list for each subj/rep pair
+
+		i = 0
+		try:
+			while True:
+				i+=1
+				# if "X" not in str(sheet.cell(i,2)):
+				if str(sheet.cell(i,1)) != "empty:''":
+					# print str(sheet.cell(i,1))
+					#add word specifying the location of the bad neutral image - must extract string by turning cell obj to str, and extracting
+					bad_neutrals[(subjrep)].add(str(sheet.cell(i,0))[str(sheet.cell(i,0)).find("'")+1:str(sheet.cell(i,0)).rfind("'")])
+				else:
+					continue
+		except IndexError:
+			continue
 
 	dirs = os.listdir(path)
 	Analyses = join(path, 'Analyses')		#gets the path for the analyses folder
@@ -46,40 +70,49 @@ def moveNormal(subjsreps):
 			newpath = join(path, folder[0])		#gets the path for the folder
 
 			traceFolder = join(newpath, 'Completed_traces') #gets the folder with the completed traces within the subj/rep folder
+			# traceFolder = join(newpath,'Target_frames')
 
 			traces = os.listdir(traceFolder)		#gets a list of the files in that folder
 
 			#if wanting to do range of frames, will need to change 'SingleFrames' destination folder above, and change below 'T' to 'R'
-			targetTraces = [i for i in traces if 'T' in i and 'traced' in i]	#gets only target trace files out of the list of previously identified files
+			#if getting only target trace files out of the list of previously identified files, uncomment 'traced'
+			# targetTraces = [i for i in traces if 'T' in i and 'traced' in i]	# Old-style trace files
+			targetJsonTraces = [i for i in traces if 'json' in i]  #json style trace files
+			targetTraces = readJsonTraces(targetJsonTraces, traceFolder)
 
 			word_list = []
 			word_set = set()
 ###################################  getting the bad neutral traces (the word after the neutral image)
 			
-			excel = xlrd.open_workbook(join(path, "Inadequate_neutrals.xls"))		#check the excel folder where 'bad' neutral images are identified
-			for subjrep in subjsreps:
+			# excel = xlrd.open_workbook(join(path, "Inadequate_neutrals.xls"))		#check the excel folder where 'bad' neutral images are identified
+			# for subjrep in subjsreps:
 				
-				try:
-					sheet = excel.sheet_by_name((subjrep))		#obtain the sheet object from the excel workbook object
-				except:
-					sheet = excel.sheet_by_name((subjrep[1:]))  #if the sheet name is a single digit, and a '0' is not inserted before the single number
+			# 	try:
+			# 		sheet = excel.sheet_by_name((subjrep))		#obtain the sheet object from the excel workbook object
+			# 	except:
+			# 		sheet = excel.sheet_by_name((subjrep[1:]))  #if the sheet name is a single digit, and a '0' is not inserted before the single number
 
-				i = 0
+			# 	i = 0
 				
-				try:
-					while True:
-						i+=1
-						#add word specifying the location of the bad neutral image - must extract string by turning cell obj to str, and extracting
-						bad_neutrals[(subjrep)].add(str(sheet.cell(i,0))[str(sheet.cell(i,0)).find("'")+1:str(sheet.cell(i,0)).rfind("'")])
+			# 	try:
+			# 		while True:
+			# 			i+=1
+			# 			# if "X" not in str(sheet.cell(i,2)):
+			# 			if str(sheet.cell(i,1)) != "empty:''":
+			# 				# print str(sheet.cell(i,1))
+			# 				#add word specifying the location of the bad neutral image - must extract string by turning cell obj to str, and extracting
+			# 				bad_neutrals[(subjrep)].add(str(sheet.cell(i,0))[str(sheet.cell(i,0)).find("'")+1:str(sheet.cell(i,0)).rfind("'")])
+			# 			else:
+			# 				continue
 
-				except IndexError:
-					continue
+			# 	except IndexError:
+			# 		continue
 ####################################
 			for trace in targetTraces:		#iterates through the traces to get list of words:frame number tuples
 				
-				underscores = [i for i,j in enumerate(trace) if j == '_']					#finds the underscores (dividers) within the file name
+				# underscores = [i for i,j in enumerate(trace) if j == '_']					#finds the underscores (dividers) within the file name
 				
-				word = trace[underscores[1]+1:underscores[2]]		#extracts the word from the file names
+				word = trace.split('_')[2]#[underscores[1]+1:underscores[2]]		#extracts the word from the file names
 				if '+' in word or word in word_set:			#only neutral images (occurring in between words) will have a '+' - don't add these
 					continue
 				word_set.add(word)  #add word to set (set, because there are multiple sounds in each word, multiple traces, only want 1 instance of each word)
@@ -96,9 +129,10 @@ def moveNormal(subjsreps):
 
 			for trace in targetTraces:		#iterates through the traces a second time to move the trace files, store neutral trace file names
 
-				underscores = [i for i,j in enumerate(trace) if j == '_']
+				# underscores = [i for i,j in enumerate(trace) if j == '_']
 
-				word = trace[underscores[1]+1:underscores[2]]
+				# word = trace[underscores[1]+1:underscores[2]]
+				word = trace.split('_')[2]	
 				if '+' in word:			#only neutral traces will have a '+'
 					between = word.split('+')	#separate the two words that the trace occurs in between
 					neutral_trace_paths[subj][rep]['s_{0}'.format(between[0])] = trace 		#add the first word to a 's_' key, referencing this trace
@@ -122,23 +156,37 @@ def moveNormal(subjsreps):
 		# 		wordLocale = join(repLocale,word)	#get location for the word directory
 		# 		shutil.copy2(C1Locale, join(wordLocale, C1))	#copy/paste the C1 (primary) neutral trace file from its location, to all word folders
 	
-	return word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps
+	return word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps, targetTraces
 ##############################################################################
 
+def readJsonTraces(targetJsonTraces,path): #expects a list of file names, and the preceding path (str)
+	trace_data = {}
+	for target_trace in targetJsonTraces:
+		with open(join(path,target_trace),'rU') as data:
+			# tracefile = json.load(data)
+			trace_data.update(json.load(data)['trace-data'])  # consistent with the current (Oct.2015) .json format used by APIL
+			# data.close()
+	return trace_data
 
 
-def findLast(neutral_trace_paths, subj,rep,word_folder,traceFolder,word_path):  #gets the frames labeled with an 's_'
+def findLast(neutral_trace_paths, subj,rep,word_folder,word_path,targetTraces):  #gets the frames labeled with an 's_'
 	C2 = neutral_trace_paths[subj][rep]['e_{0}'.format(word_folder)]		#extract the name of the neutral frame
-	shutil.copy2(join(traceFolder,C2), join(word_path, 'C2_{0}'.format(C2)))	#move the neutral trace to new location, placing C2 in front of the filename
+	# shutil.copy2(join(traceFolder,C2), join(word_path, 'C2_{0}'.format(C2)))	#move the neutral trace to new location, placing C2 in front of the filename
+	with open(join(word_path,C2),'w') as writeFile:
+		for i in range(len(targetTraces[C1])):
+			writeFile.write("{0}\t{1}\t{2}".format(i,targetTraces[C2][i]["x"],targetTraces[C2][i]["y"]))
 	return True
 
 
-def findFirst(neutral_trace_paths, subj,rep,word_folder,traceFolder,word_path):  #gets the frames labeled with an 'e_'
+def findFirst(neutral_trace_paths, subj,rep,word_folder,word_path,targetTraces):  #gets the frames labeled with an 'e_'
 	C2 = neutral_trace_paths[subj][rep]['s_{0}'.format(word_folder)]		#extract the name of the neutral frame
-	shutil.copy2(join(traceFolder,C2), join(word_path, 'C2_{0}'.format(C2))) #move the neutral trace to new location, placing C2 in front of the filename
+	# shutil.copy2(join(traceFolder,C2), join(word_path, 'C2_{0}'.format(C2))) #move the neutral trace to new location, placing C2 in front of the filename
+	with open(join(word_path,C2),'w') as writeFile:
+		for i in range(len(targetTraces[C1])):
+			writeFile.write("{0}\t{1}\t{2}".format(i,targetTraces[C2][i]["x"],targetTraces[C2][i]["y"]))
 	return True
 
-def findAdjacent(neutral_trace_paths, subj,rep,word1,word2,traceFolder,word_path,word_list,bad_neutrals):
+def findAdjacent(neutral_trace_paths, subj,rep,word1,word2,word_path,word_list,bad_neutrals,targetTraces):
 	idx1 = word_list.index(word1)-1 	#obtains the index for the previous word (1) & the next word (2)
 	idx2 = word_list.index(word2)+1
 	try:									#these try: except: statments prevent overreach past beginning and end of recording
@@ -150,16 +198,14 @@ def findAdjacent(neutral_trace_paths, subj,rep,word1,word2,traceFolder,word_path
 		next_word = word_list[idx2]
 	except:
 		next_word = word_list[len(word_list)-1]
-	
-	match = False	#used as a check incase a trace is deemed "bad"; the match is returned False
 
+	match = False	#used as a check incase a trace is deemed "bad"; the match is returned False
 	if prev_word in bad_neutrals[subj+rep]:	#check for goodness of trace
 		if next_word in bad_neutrals[subj+rep]: #if prev_word is bad, check for goodness of other trace
 			return False, prev_word, next_word	#return no match if all traces bad
-
 		else:	#if the next_word is a good trace
 			try:
-				match = findLast(neutral_trace_paths, subj,rep,next_word,traceFolder,word_path) #see if trace exists - if so, return it
+				match = findLast(neutral_trace_paths, subj,rep,next_word,word_path,targetTraces) #see if trace exists - if so, return it
 				return match, prev_word, next_word
 			except KeyError as e:
 				# print 'word {0} not found; continuing on to next level'.format(e) #if not found, return no match
@@ -167,46 +213,57 @@ def findAdjacent(neutral_trace_paths, subj,rep,word1,word2,traceFolder,word_path
 
 	else:	#same structure, function calls as above, checking goodness, checking if exists, if both conditions satisified, return a valid trace (a match)
 		try:
-			match = findLast(neutral_trace_paths,subj,rep,next_word,traceFolder,word_path)
+			match = findLast(neutral_trace_paths,subj,rep,next_word,word_path,targetTraces)
 			return match, prev_word, next_word
 		except KeyError as e:
 			# print 'word {0} not found; trying next_word word'.format(e)
 			if next_word in bad_neutrals[subj+rep]:
-				
 				return False, prev_word, next_word
 			else:
 				try:
-					
-					match = findFirst(neutral_trace_paths,subj,rep,prev_word,traceFolder,word_path)
+					match = findFirst(neutral_trace_paths,subj,rep,prev_word,word_path,targetTraces)
 					return match, prev_word, next_word
 				except KeyError as e:
 					# print 'word {0} not found; continuing on to next level'.format(e)
-					
 					return False, prev_word, next_word
 				
 	return match, prev_word, next_word
 
 
-def checkC1(traceFolder, word_list, subj, rep, C1, neutral_trace_paths, bad_neutrals):
+def checkC1(word_list, subj, rep, C1, neutral_trace_paths, bad_neutrals, targetTraces):
 	i = 0
 	available_traces = {}	#holds k/v pairs: trace, percent complete.  If the 90% benchmark isn't found, use best available image
 	while True:		#continue until an acceptable image is found
-		text = open(join(traceFolder,C1), 'r').readlines()		#open the trace text file
+		# text = open(join(traceFolder,C1), 'r').readlines()		#open the trace text file
+		data = targetTraces[C1]
+		
+		###Uncomment below to use for standard traced.txt files
 		#the below code in 'for-loop' is to determine how complete a trace is; the fewer data points the worse the trace, and consequently the image
-		completeness = [0,0]		#keeps track of [empty-data-points,filled-data-points] within the trace file
-		for line in text:
-			line = line.split()
-			if line[0] == '-1':		#if datapoint is empty, increase the empty data point count
-				completeness[0] += 1
-			else:					#else, increase full data point count
-				completeness[1] += 1
-		percentage = (completeness[1] / (completeness[0] + completeness[1])) * 100	#create a percentage-of-completeness (a 'quality-of-trace' value)
+		# completeness = [0,0]		#keeps track of [empty-data-points,filled-data-points] within the trace file
+		# for line in text:
+		# 	line = line.split()
+		# 	print line
+		# 	if line[0] == '-1':		#if datapoint is empty, increase the empty data point count
+		# 		completeness[0] += 1
+		# 	else:					#else, increase full data point count
+		# 		completeness[1] += 1
+		# percentage = (completeness[1] / (completeness[0] + completeness[1])) * 100	#create a percentage-of-completeness (a 'quality-of-trace' value)
+
+		if len(data) <= 32:
+			#assume old trace - new trace will have more datapoints.
+			denominator = 32
+		else:
+			# 200 is a semi-arbitrary number based on the number of datapoints that ought to be filled
+			# from the Web tracer in order to have a complete trace
+			denominator = 200 
+		percentage = len(data)/denominator
+
 		if percentage > 90:		#if the percentage filled is greater than 90%, go ahead and use the trace
 			C1 = join(traceFolder,C1)
 			return C1
 		else:					#otherwise, get the path to the [chronologically] following [neutral] trace
-			available_traces[C1] = percentage 	#record the completeness of the trace with
-			try:
+			available_traces[C1] = percentage 	#record the completeness of the trace
+			try:  # find the next C1
 				word = word_list[i]
 				if word_list[i+1] not in bad_neutrals[(subj+rep)]:	#if it is a bad trace image (e.g., not steady), move on to the next image
 					try:
@@ -216,17 +273,17 @@ def checkC1(traceFolder, word_list, subj, rep, C1, neutral_trace_paths, bad_neut
 				
 				i += 1 	#increase the index and continue to next iteration if this trace does not satisfy the 90% requirement
 
-			except IndexError:	#instead of breaking, alert the user, and just use the last trace grabbed
+			except IndexError:	#instead of breaking, alert the user, and use the most complete trace available under 90%
 				ordered_available_traces = sorted(available_traces.items(), key=lambda x: [x])
 				ordered_available_traces.reverse()
 				C1 = ordered_available_traces[0][0]
 				
 				print "ERROR: There were no neutral traces with 90 percent completion found; the the best available trace has been used at {1} percent completion: {0}\n".format(C1, percentage)
-				return join(traceFolder,C1)
+				return C1
 
 
 
-def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps):
+def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps, targetTraces):
 	path = os.getcwd()
 	dirs = os.listdir(path)
 	
@@ -238,44 +295,60 @@ def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLoc
 		
 		folder = [i for i in dirs if subjrep in i]  #gets folder name within the main SG folder that matches the subjrep
 
-		newpath = join(path, folder[0])		#gets the path for the folder
+		folderpath = join(path, folder[0])		#gets the path for the folder
 
-		traceFolder = join(newpath, 'Completed_traces') #gets the path to folder with the completed traces within the subj/rep folder
+		# traceFolder = join(newpath, 'Completed_traces') #gets the path to folder with the completed traces within the subj/rep folder
+		# traceFolder = join(newpath, 'Target_frames')  #this finds the actual image file to move
 
 		try:
 			C1 = C1s[subj]		#see if a neutral frame has already been assigned for this subject
 		except KeyError:
+			#****************
+			# Will need to incorporate looking in the stimulus response file to find the first available
+			# trace with try/except statements
+			#****************
+			stim_response = open(join(folderpath,'stimulus_response.csv'),'r').readlines()
 			#below, 's_start' refers to the first neutral trace identified in the recording, prior to the elicitation of the first stimuli
-			C1 = neutral_trace_paths[subj][rep]['s_start']	#if not, identifies the primary neutral trace (C1) which will be used to transform all traces
-			#opens the file, determines how many points are identified - if not at least 95% of the points are identified, continue on to the next trace
-			C1 = checkC1(traceFolder, word_list, subj, rep, C1, neutral_trace_paths, bad_neutrals)
-			C1s[subj] = C1 #add the new C1 trace file to the subject, so other reps of this subj will use this same trace
+			current_word = 's_start'
+			for line in stim_response:
+				if line[0] != '1':
+					continue
+				line = line.split(',')
+				if len(line[1]) < 1:
+					continue
+				current_word = line[1]
+				try:
+					C1 = neutral_trace_paths[subj][rep][current_word]	#if not, identifies the primary neutral trace (C1) which will be used to transform all traces
+					break
+				except
+					#opens the file, determines how many points are identified - if not at least 90% of the points are identified, continue on to the next trace
+					C1 = checkC1(word_list, subj, rep, C1, neutral_trace_paths, bad_neutrals, targetTraces)
+					C1s[subj] = join(traceFolder,C1) #add the new C1 trace file to the subject, so other reps of this subj will use this same trace
 		
 		#line below : probably a way to do this without getting 'DS.Store' files in listdir - if so, can simplify
 		for word_folder in [i for i in os.listdir(join(join(newLocale,subj),rep)) if '.' not in i]:		#don't get any 'DS.Store' directories
-			# if word_folder == 'earball':
-			# 	print 'EARBALL'
 			word_path = join(join(join(newLocale, subj),rep), word_folder)  	#obtain the path of the identified folder
-			shutil.copy2(C1, join(word_path, 'C1_{0}'.format(C1[C1.rfind('/')+1:])))	#automatically move the C1 master trace to every word's folder
+			C1_file = 'C1_{0}'.format(C1[C1.rfind('/')+1:])
+			with open(join(word_path,C1_file),'w') as writeFile:
+				for i in range(len(targetTraces[C1])):
+					writeFile.write("{0}\t{1}\t{2}".format(i,targetTraces[C1][i]["x"],targetTraces[C1][i]["y"]))
+
+			# shutil.copy2(C1, join(word_path, 'C1_{0}'.format(C1[C1.rfind('/')+1:])))	#automatically move the C1 master trace to every word's folder
 			prev_word = word_folder		#assign the previous word (this word) and next word to values
 			try:
 				next_word = word_list[word_list.index(word_folder)+1]
 			except IndexError:	#if there is not another word after the current in the recording, keep "next_word" at the same word, without advancing
 				next_word = prev_word
-				pass
 			
 			while True:
 				#lots of 'IF' conditions below, to make sure that a) trace is not a bad trace, and b), the trace exists
 				#if one of the two conditions are violated, an adjacent neutral trace must be found to replace the bad/missing trace
 				#similar to the code in the 'findAdjacent' function; enough necessary differences that it was kept separate, however.
 				if prev_word in bad_neutrals[subjrep]:  
-					
 					if next_word in bad_neutrals[subjrep]:
 						i = 0
 						while i < 2:	#extend the search for a replacement trace to only two outside "layers" of image traces, when both traces are bad
-							# print 'EARBALL BAD BAD', prev_word, next_word
-							match,prev_word,next_word=findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,traceFolder,word_path,word_list,bad_neutrals)
-							# print 'BAD BAD', prev_word, next_word
+							match,prev_word,next_word=findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,word_path,word_list,bad_neutrals,targetTraces)
 							if match == True:	#if a good image is found, break out of the loop
 								break
 							if match == False:
@@ -283,18 +356,17 @@ def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLoc
 						if match == False: 	#if no good trace found within the 2-layer window, report an error
 							print 'ERROR: No successful neutral trace found for {0} in {1}; continuing without placing trace for {0}.\n'.format(word_folder, subjrep)
 						break
+
 					else:
 						# if the next word's image isn't a bad image, as identified in the "inadequate_neutrals.xls" file, assign
 						try:
-							# print 'EARBALL BAD GOOD', next_word
-							match = findFirst(neutral_trace_paths, subj,rep,word_folder,traceFolder,word_path)
+							match = findFirst(neutral_trace_paths, subj,rep,word_folder,word_path,targetTraces)
 							break
 						except KeyError as e:
 							# print 'end word {0} not found; trying start word'.format(e)
 							i = 0
 							while i < 2:
-								match, prev_word, next_word= findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,traceFolder,word_path,word_list,bad_neutrals)
-								# print 'BAD GOOD', prev_word, next_word
+								match, prev_word, next_word= findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,word_path,word_list,bad_neutrals,targetTraces)
 								if match == True:
 									break
 								if match == False:
@@ -302,19 +374,17 @@ def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLoc
 							if match == False:
 								print 'ERROR: No successful neutral trace found for {0} in {1}; continuing without placing trace for {0}.\n'.format(word_folder, subjrep)
 							break
+
 				else: #if the first image (prev_word) isn't a bad image, see if it exists
 					try:
-						# print 'EARBALL GOOD ?', next_word
-						match = findLast(neutral_trace_paths, subj,rep,word_folder,traceFolder,word_path)
+						match = findLast(neutral_trace_paths, subj,rep,word_folder,word_path,targetTraces)
 						break
-						
 					except KeyError as e:
 						# print 'end word {0} not found; trying start word'.format(e)
 						if next_word in bad_neutrals[subjrep]:
 							i = 0
 							while i < 2:
-								match,prev_word,next_word=findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,traceFolder,word_path,word_list,bad_neutrals)
-								# print 'GOOD BAD', prev_word, next_word
+								match,prev_word,next_word=findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,word_path,word_list,bad_neutrals,targetTraces)
 								if match == True:
 									break
 								if match == False:
@@ -322,17 +392,16 @@ def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLoc
 							if match == False:
 								print 'ERROR: No successful neutral trace found for {0} in {1}; continuing without placing trace for {0}.\n'.format(word_folder, subjrep)
 							break
+
 						else:
 							try:
-								match = findFirst(neutral_trace_paths, subj,rep,word_folder,traceFolder,word_path)
-								break
-								
+								match = findFirst(neutral_trace_paths, subj,rep,word_folder,word_path,targetTraces)
+								break	
 							except KeyError as e:
 								# print 'end word {0} not found; trying start word'.format(e)
 								i = 0
 								while i < 2:
-									match, prev_word, next_word = findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,traceFolder,word_path,word_list,bad_neutrals)
-									# print 'LAST OPTION', prev_word, next_word
+									match, prev_word, next_word = findAdjacent(neutral_trace_paths, subj,rep,prev_word,next_word,word_path,word_list,bad_neutrals,targetTraces)
 									if match == True:
 										break
 									if match == False:
@@ -341,6 +410,42 @@ def moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLoc
 									print 'ERROR: No successful neutral trace found for {0} in {1}; continuing without placing trace for {0}.\n'.format(word_folder, subjrep)
 								break
 
+
+def readAllData(subjsreps):
+	# this function only for up-converting old trace files to the new .json style data structure
+	path = os.getcwd()
+	
+	subjs = []
+	reps = set()
+	for subjrep in subjsreps:		#find the subject/repetition and place in separate structures
+		subjs.append(subjrep[:2])
+		reps.add(subjrep[-1])
+
+	dirs = os.listdir(path)
+	for subj in subjs:		
+		for rep in reps:	
+			subj_folder = [i for i in dirs if subj+rep in i]  #gets folder name within the main SG folder
+			trace_path = join(join(path, subj_folder[0]),'Completed_traces')
+			traces_fl_names = os.listdir(trace_path)
+			trace_data = {}
+			traces = [i for i in traces_fl_names if 'traced' in i]
+			for trace in traces:
+				m = re.match('.+\.png',trace)  # exclude the traced.tracer.txt ending
+				img_name = m.group(0)
+				trace_data[img_name] = []
+				data_points = open(join(trace_path,trace),'r').readlines()
+				for line in data_points:
+					line = line.split('\t')
+					x = line[1]
+					y = line[2]
+					if x == '-1':  #ignore missing data points from the trace
+						continue
+					trace_data[img_name].append({'y':int(float(y.strip())),'x':int(float(x.strip()))})
+	to_json = {'roi':"{}",'tracer-id':'','subject-id':subj+rep,'project-id':'','trace-data':trace_data}
+	jsonData = json.JSONEncoder().encode(to_json)
+	newJson = 'upgrade_traces.json'
+	writeFile = open(join(trace_path,newJson),'w')
+	writeFile.write(jsonData)
 
 ##############################################################################
 def get_Subjs():    #user interface to identify subjects in question
@@ -402,8 +507,10 @@ def get_Subjs():    #user interface to identify subjects in question
 
 def main():
 	subjsreps = get_Subjs() #returns a set of 'subject-repetition' pairs in the form "1a", "10c", etc
-	word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps = moveNormal(subjsreps) #moves normal trace files to established directory structure
-	moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps) #moves the neutral trace files to their respective directories
+	# will convert all old trace files to json data structure
+	readAllData(subjsreps)
+	word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps, targetTraces = moveNormal(subjsreps) #moves normal trace files to established directory structure
+	moveNeutrals(word_lists, word_set, bad_neutrals, neutral_trace_paths, newLocale, subjs, reps, subjsreps, targetTraces) #moves the neutral trace files to their respective directories
 
 main()
 
