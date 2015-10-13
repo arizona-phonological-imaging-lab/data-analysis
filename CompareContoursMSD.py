@@ -1,4 +1,4 @@
-#### Poorly written code by Sam Johnston
+#### Sam Johnston
 #### 09-23-15
 
 #### Computes the mean sum of distances (MSD) for a trace by averaging
@@ -39,12 +39,14 @@ class CompareContours:
 		# data storage structures
 		self.missingtraces1 = set([])
 		self.missingtraces2 = set([])
+
 		# msd dd(list) value contains:
 		# [0] msd value for each trace comparison, 
 		# [1] & [2] signed msd value tells if tracer1 is generally above or below tracer2 (&viceversa)
 		# [3] & [4] # of unmatched points from trace1,trace2, and 
 		self.msd = dd(lambda: dd(list))
 
+		# preset vars
 		self.tracer1 = self.traces1['tracer-id']
 		self.tracer2 = self.traces2['tracer-id']
 		self.total_msd = 0
@@ -68,9 +70,8 @@ class CompareContours:
 			trace_range = (trace_end+1)-trace_start
 			# find _index_ of min and max of the comparable points in each list
 			start1 = trace_start-minx1
-			# end1 = start1+trace_range
 			start2 = trace_start-minx2
-			# end2 = start2+trace_range
+			
 			# compute msd
 			sumsd = 0
 			# signed to help tell if a tracer is generally tracing below or above another
@@ -82,6 +83,7 @@ class CompareContours:
 				signedsd2 += tracedata2[start2+i]['y']-tracedata1[start1+i]['y']
 			if i == 0:
 				print tracefile, "contains no data points."
+			# compute averages
 			self.total_msd += sumsd / i
 			self.total_signedmsd1 += signedsd1 / i
 			self.total_signedmsd2 += signedsd2 / i
@@ -95,9 +97,7 @@ class CompareContours:
 			self.msd[tracefile][4] = minx2-minx1 if minx2-minx1 > 0 else 0
 			self.msd[tracefile][4] += maxx2-maxx1 if maxx2-maxx1 > 0 else 0
 			self.total_untraced2 += self.msd[tracefile][4]
-			# print self.msd[tracefile]
-			# print self.tracer1, self.tracer2, '|', tracefile, '|', minx1, maxx1, '|', minx2, maxx2
-		
+
 		for tracefile in self.traces2['trace-data']:
 			if tracefile not in self.traces1['trace-data']:
 				self.missingtraces2.add(tracefile)
@@ -116,7 +116,7 @@ class CompareContours:
 
 	def writelog(self):
 		filepath = os.path.join(self.writepath,self.traces1['tracer-id']+'-'+self.traces2['tracer-id']+'_'+self.traces1['subject-id']+'.traces.msd.txt')
-
+		# Write comparison results
 		logfile = open(filepath,'w')
 		logfile.write("Comparison of:\t{0}\tand\t{1}\n".format(self.tracer1,self.tracer2))
 		logfile.write("For subject:\t{0}\n".format(self.traces1['subject-id']))
@@ -135,13 +135,12 @@ class CompareContours:
 		logfile.write("The MSD, Signed MSD, and the number of unmatched datapoints (by speaker)\n is given below, by trace file:\n")
 		self.checkcount = 0
 		for tracefile in sorted(self.msd.items()):
-			# print tracefile[1][0]
+
 			tracefileName = tracefile[0]
 			meansd = tracefile[1][0]
 			signedsd1 = tracefile[1][2]
 			untraced1 = tracefile[1][3]
 			untraced2 = tracefile[1][4]
-			# print tracefileName, meansd,signedsd1,untraced1,untraced2
 			if (meansd > 3) or (untraced1+untraced2 > 40):
 				tobechecked = "Yes"
 				self.checkcount += 1
@@ -154,6 +153,7 @@ class CompareContours:
 		logfile.write("Total number of items to be checked:\t{0}".format(self.checkcount))
 
 	def printsummary(self):
+		# display post-comparison summary
 		print("Comparison of:\t{0}\tand\t{1}\n".format(self.tracer1,self.tracer2))
 		print("For subject:\t{0}\n".format(self.traces1['subject-id']))
 		print("For project:\t{0}\n".format(self.traces1['project-id']))
