@@ -13,7 +13,6 @@ class Converter():
     def main(self, folder):
         conFilePath, jpgPaths = self.read_folder_contents(folder)
         numFiles, splitCoords = self.read_con_file(conFilePath)
-        # resampled = self.resample_data(numFiles, splitCoords)
         splitCoords = self.resample_data(numFiles, splitCoords)
         self.print_new_files(numFiles, folder, jpgPaths, splitCoords)
 
@@ -68,22 +67,13 @@ class Converter():
             origLength = len(splitCoords[i])                                    # original length of the .con file columns 
             resampled = []                                                      # (ie the number of traced points)
             if  origLength > resampleTo:       
-                splitCoords = self.append_coordinates(resampleTo,
-                    splitCoords,i,origLength,resampled)
-            # if origLength <= resampleTo:                                        # if the file is less than 32 points, keep all points
-            #     splitCoords = self.append_coordinates(resampleTo,
-            #         splitCoords,i,origLength,resampled)
+                        for j in range(resampleTo):
+                            resampled.append(splitCoords[i][int(ceil(j * 
+                                                    origLength / resampleTo))])         # walk down the array of tuples (coordinates) 
+                                                                                        # in an evenly-spaced manner
+                        splitCoords[i]=resampled
             else:
                 pass
-        return splitCoords
-        # return resampled
-
-    def append_coordinates(self,resampleTo,splitCoords,i,origLength,resampled):
-        for j in range(resampleTo):
-            resampled.append(splitCoords[i][int(ceil(j * 
-                                    origLength / resampleTo))])         # walk down the array of tuples (coordinates) 
-                                                                        # in an evenly-spaced manner
-        splitCoords[i]=resampled
         return splitCoords
 
     def print_new_files(self, numFiles, folder, jpgPaths, splitCoords):
