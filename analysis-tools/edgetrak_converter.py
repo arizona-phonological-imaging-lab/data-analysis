@@ -13,7 +13,8 @@ class Converter():
     def main(self, folder):
         conFilePath, jpgPaths = self.read_folder_contents(folder)
         numFiles, splitCoords = self.read_con_file(conFilePath)
-        resampled = self.resample_data(numFiles, splitCoords)
+        # resampled = self.resample_data(numFiles, splitCoords)
+        splitCoords = self.resample_data(numFiles, splitCoords)
         self.print_new_files(numFiles, folder, jpgPaths, splitCoords)
 
     def read_folder_contents(self, folder):
@@ -29,6 +30,8 @@ class Converter():
             if '.con' in fileName:
                 conFilePath = os.path.normpath(os.path.join(folder, fileName))
             if ".jpg" in fileName:
+                jpgPaths.append(os.path.splitext(fileName)[0])
+            elif fileName.endswith(".png"):                                     #Allow for finding .png files too
                 jpgPaths.append(os.path.splitext(fileName)[0])
             else:
                 pass
@@ -63,28 +66,36 @@ class Converter():
         AutoTrace, which handles 32 points per traced image. """
         for i in range(numFiles):
             origLength = len(splitCoords[i])                                    # original length of the .con file columns 
-                                                                                # (ie the number of traced points)
-            if  origLength > resampleTo:
-                resampled = []
-                for j in range(resampleTo):
-                    resampled.append(splitCoords[i][int(ceil(j * 
-                                            origLength / resampleTo))])         # walk down the array of tuples (coordinates) 
-                                                                                # in an evenly-spaced manner
-                splitCoords[i]=resampled
-
+            resampled = []                                                      # (ie the number of traced points)
+            if  origLength > resampleTo:       
+                splitCoords = self.append_coordinates(resampleTo,
+                    splitCoords,i,origLength,resampled)
+            # if origLength <= resampleTo:                                        # if the file is less than 32 points, keep all points
+            #     splitCoords = self.append_coordinates(resampleTo,
+            #         splitCoords,i,origLength,resampled)
             else:
                 pass
-        return resampled
+        return splitCoords
+        # return resampled
 
+    def append_coordinates(self,resampleTo,splitCoords,i,origLength,resampled):
+        for j in range(resampleTo):
+            resampled.append(splitCoords[i][int(ceil(j * 
+                                    origLength / resampleTo))])         # walk down the array of tuples (coordinates) 
+                                                                        # in an evenly-spaced manner
+        splitCoords[i]=resampled
+        return splitCoords
 
     def print_new_files(self, numFiles, folder, jpgPaths, splitCoords):
         """ Print out a new file for each .jpg tongue image, 
         using the filename of each .jpg to create the filename for the
         corresponding .txt file. """
         for fileNum in range(numFiles):
+            print numFiles, jpgPaths
             outFile= open(folder + '/output_' +
                           str(jpgPaths[fileNum]) + '.txt' , 'w')
             i=0
+            print splitCoords[fileNum]
             for item in splitCoords[fileNum]:
                 i+=1
                 outFile.write(str(i) + '\t'  + str(item[0]) + 
