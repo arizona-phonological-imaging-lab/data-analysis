@@ -10,11 +10,21 @@ from PyQt4 import QtGui
 
 class Converter():
 
-    def main(self, folder):
+    def main(self, folder):#, format):
         conFilePath, jpgPaths = self.read_folder_contents(folder)
         numFiles, splitCoords = self.read_con_file(conFilePath)
-        splitCoords = self.resample_data(numFiles, splitCoords)
-        self.print_new_files(numFiles, folder, jpgPaths, splitCoords)
+        # if format == 'AT':                                                  # AutoTrace Manual Tracer format
+            # Currently some issues rendering - suspect it has to do with
+            # EdgeTrak needing a cropped version of our Ultrasound Image,
+            # and therefore, the coordinates for ET won't be the same as
+            # the uncropped image that the Manual Tracer requires
+        self.resample_data(numFiles)#, splitCoords)
+        self.print_new_files(numFiles, folder, jpgPaths)#, splitCoords)
+        # if format == 'ET':                                                  # EdgeTrak format
+            #TODO: Do we want to convert \italics{to} EdgeTrak?
+            # pass
+        # if format == 'AW':                                                  # APIL Web json format
+
 
     def read_folder_contents(self, folder):
         """ Reads in the contents of a folder and groups 
@@ -29,8 +39,10 @@ class Converter():
             if '.con' in fileName:
                 conFilePath = os.path.normpath(os.path.join(folder, fileName))
             if ".jpg" in fileName:
+                self.img_type = '.jpg'
                 jpgPaths.append(os.path.splitext(fileName)[0])
             elif fileName.endswith(".png"):                                     #Allow for finding .png files too
+                self.img_type = '.png'
                 jpgPaths.append(os.path.splitext(fileName)[0])
             else:
                 pass
@@ -47,7 +59,7 @@ class Converter():
         conFile.close()
         numFiles = ((len(conLines[0].strip().split())) / 2)                     # count number of columns in file and divide by 2 
                                                                                 # (since 2 columns to each image file)
-        splitCoords = [[] for i in range(numFiles)]                             # create list to append paired coordinates for 
+        self.splitCoords = [[] for i in range(numFiles)]                        # create list to append paired coordinates for 
                                                                                 # each image file
         for line in conLines:
             i=0
@@ -58,23 +70,24 @@ class Converter():
                 i+=1                                                            # to right (1,2), (3,4), (5,6)..., and this assigns
                                                                                 # each pair to a tuple
                                                                                 # and the tuple to its own sublist on splitCoord
-        return numFiles, splitCoords
+        return numFiles#, splitCoords
 
+    # def resample_data(self, numFiles, resampleTo = 32):
     def resample_data(self, numFiles, splitCoords, resampleTo = 32):
         """ Used to get the EdgeTrak data compatable with 
         AutoTrace, which handles 32 points per traced image. """
         for i in range(numFiles):
-            origLength = len(splitCoords[i])                                    # original length of the .con file columns 
+            origLength = len(self.splitCoords[i])                               # original length of the .con file columns 
             resampled = []                                                      # (ie the number of traced points)
             if  origLength > resampleTo:       
                         for j in range(resampleTo):
-                            resampled.append(splitCoords[i][int(ceil(j * 
+                            resampled.append(self.splitCoords[i][int(ceil(j * 
                                                     origLength / resampleTo))])         # walk down the array of tuples (coordinates) 
                                                                                         # in an evenly-spaced manner
-                        splitCoords[i]=resampled
+                        self.splitCoords[i]=resampled
             else:
                 pass
-        return splitCoords
+        # return splitCoords
 
     def print_new_files(self, numFiles, folder, jpgPaths, splitCoords):
         """ Print out a new file for each .jpg tongue image, 
@@ -82,8 +95,12 @@ class Converter():
         corresponding .txt file. """
         for fileNum in range(numFiles):
             print numFiles, jpgPaths
-            outFile= open(folder + '/output_' +
-                          str(jpgPaths[fileNum]) + '.txt' , 'w')
+            outFile = open(os.path.join(folder,(str(                    # Manual tracer requires output to be in specific named format.
+                jpgPaths[fileNum])+self.img_type+                       #  'etc' [edgetrack converter] used as tracer initials.
+                '.etc.traced.txt')),'w')                                #  Must use 'etc' as initials in Manual tracer to view
+                                                                        
+            # outFile= open(folder + '/output_' +
+            #               str(jpgPaths[fileNum]) + '.txt' , 'w')
             i=0
             print splitCoords[fileNum]
             for item in splitCoords[fileNum]:
