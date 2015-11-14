@@ -33,8 +33,11 @@ class MainWindow(QtGui.QMainWindow):
         openAction.setStatusTip('Open File(s)')
         openAction.triggered.connect(center.select_files)
 
-        convertEdgeTrakAction = QtGui.QAction('EdgeTrak --> APIL', self)
-        convertEdgeTrakAction.triggered.connect(center.convertEdgeTrak)
+        convertEdgeTrak2APILAction = QtGui.QAction('EdgeTrak --> APIL', self)
+        convertEdgeTrak2APILAction.triggered.connect(center.convertEdgeTrak2APIL)
+
+        convertEdgeTrak2APILwebAction = QtGui.QAction('EdgeTrak --> APIL Web', self)
+        convertEdgeTrak2APILwebAction.triggered.connect(center.convertEdgeTrak2APILweb)
 
         exitAction = QtGui.QAction(QtGui.QIcon(imgDir + 'exit.svg'), 
                                    'Exit', self)
@@ -53,7 +56,8 @@ class MainWindow(QtGui.QMainWindow):
         importMenu.addAction(openAction)
 
         convertMenu = menubar.addMenu('&Convert')
-        convertMenu.addAction(convertEdgeTrakAction)
+        convertMenu.addAction(convertEdgeTrak2APILAction)
+        convertMenu.addAction(convertEdgeTrak2APILwebAction)
 
         exitMenu = menubar.addMenu('&Exit')
         exitMenu.addAction(exitAction)
@@ -104,11 +108,21 @@ class MainWidget(QtGui.QWidget):
         for fileName in fileNames:
             self.editSelectFiles.append(str(fileName))
 
-    def convertEdgeTrak(self):
+    def convertEdgeTrak2APIL(self):
+        format = "AT"
         folder = str(QtGui.QFileDialog.getExistingDirectory(self, 
                                "Select folder containing *.con file + images")) # make dialog and select dir
         converter = conv.Converter()
-        converter.main(folder)
+        converter.main(folder,format)
+
+    def convertEdgeTrak2APILweb(self):
+        format = "AW"
+        print "here1"
+        folder = str(QtGui.QFileDialog.getExistingDirectory(self, 
+                               "Select folder containing *.con file + images")) # make dialog and select dir
+        converter = conv.Converter()
+        print "here"
+        converter.main(folder,format)
 
     def createExclusiveGroup(self):
         groupBox = QtGui.QGroupBox("Visualization Options")
