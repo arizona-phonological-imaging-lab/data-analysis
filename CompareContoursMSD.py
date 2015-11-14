@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #### Sam Johnston
 #### 09-23-15
 
@@ -9,7 +10,7 @@
 #### at the end with MSD.
 
 #### Requires .json filetype traces.
-#### By default safes the generated comparison file to the Desktop
+#### By default saves the generated comparison file to the Desktop
 
 from __future__ import division
 from collections import defaultdict as dd
@@ -141,7 +142,9 @@ class CompareContours:
 			signedsd1 = tracefile[1][2]
 			untraced1 = tracefile[1][3]
 			untraced2 = tracefile[1][4]
-			if (meansd > 3) or (untraced1+untraced2 > 40):
+			sdthreshold = 3
+			overtrace_threshold = 40
+			if (meansd > sdthreshold) or (untraced1+untraced2 > overtrace_threshold):
 				tobechecked = "Yes"
 				self.checkcount += 1
 			else:
